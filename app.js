@@ -301,8 +301,8 @@ function vImportar() {
         <li>Abre la app <b>Atajos</b> › pestaña <b>Automatización</b> › <b>＋</b> › <b>Mensaje</b>.</li>
         <li>En <b>“El mensaje contiene”</b> escribe <code>Bancolombia</code>.</li>
         <li>Marca <b>Ejecutar inmediatamente</b> (y desactiva “Notificar al ejecutar” si quieres) › <b>Siguiente</b>.</li>
-        <li>Toca <b>Nuevo atajo en blanco</b> y agrega la acción <b>Texto</b>. Escribe <code>---</code>, da un salto de línea y luego inserta la variable <b>Entrada del atajo</b>; tócala y elige <b>Contenido</b>.</li>
-        <li>Agrega la acción <b>Añadir a archivo de texto</b> (<i>Append to Text File</i>). Archivo: <code>movimientos-banco.txt</code> en la carpeta <b>Atajos</b> de iCloud Drive. Activa <b>Crear nueva línea</b>.</li>
+        <li>Toca <b>No hay acciones</b>. Debe quedar <b>Recibir mensajes como entrada</b>. Busca y agrega la acción <b>Texto</b>; escribe <code>---</code> e inserta la variable <b>Entrada de atajo</b>; tócala y elige <b>Contenido</b>.</li>
+        <li>Busca y agrega la acción <b>Anexar al final del archivo de texto</b> (no la de Dropbox). Archivo: <code>movimientos-banco.txt</code> en la carpeta <b>Atajos</b> de iCloud Drive. Activa <b>Crear nueva línea</b>.</li>
         <li>Listo. Cada SMS de Bancolombia queda guardado solo. Cuando quieras, entra aquí y toca <b>Elegir archivo</b>.</li>
       </ol>
       <p class="muted small">Tip: el archivo guarda todo el historial, así que aunque borres la app puedes volver a importarlo.</p>
