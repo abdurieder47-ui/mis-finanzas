@@ -131,13 +131,43 @@ function crearTx(msg, h) {
   return tx;
 }
 
-function importarTexto(texto) {
-  const res = { nuevos: 0, repetidos: 0, ignorados: [] };
-  for (const msg of Parser.dividirMensajes(texto)) {
+// El atajo puede guardar el mismo SMS dos veces: primero tal cual (respaldo) y luego con
+// " ##cat=<categoría elegida en la lista>". Se unen por hash y gana la categoría elegida.
+const NO_REGISTRAR = /^no registrar$/i, DESPUES = /^decidir despu[eé]s$/i;
+function partirMensajes(texto) {
+  const porHash = new Map();
+  for (const trozo of Parser.dividirMensajes(texto)) {
+    const m = trozo.match(/^([\s\S]*?)\s*##cat=\s*(.*)$/);
+    const msg = m ? m[1] : trozo, cat = m ? m[2].trim() : '';
+    if (msg.length < 10) continue;
     const h = Parser.hash(msg);
+    const prev = porHash.get(h);
+    if (!prev) porHash.set(h, { msg, h, cat });
+    else if (cat) prev.cat = cat;
+  }
+  return [...porHash.values()];
+}
+function categoriaElegida(nombre) {
+  if (!nombre || DESPUES.test(nombre)) return null;
+  const c = S.categorias.find(x => norm(x.n) === norm(nombre));
+  if (c) return c.n;
+  S.categorias.splice(S.categorias.length - 2, 0, { n: nombre, i: '🏷️' });
+  return nombre;
+}
+
+function importarTexto(texto) {
+  const res = { nuevos: 0, repetidos: 0, ignorados: [], descartados: 0 };
+  for (const { msg, h, cat } of partirMensajes(texto)) {
     if (S.hashes[h]) { res.repetidos++; continue; }
+    if (NO_REGISTRAR.test(cat)) { S.hashes[h] = 1; res.descartados++; continue; }
     const tx = crearTx(msg, h);
     if (!tx) { res.ignorados.push(msg); continue; }
+    const elegida = categoriaElegida(cat);
+    if (elegida) {
+      if (elegida !== tx.categoria && tx.contraparte) { tx.catManual = true; aprender(tx, elegida); }
+      if (elegida !== 'Pago de deudas') tx.deudaId = null;
+      tx.categoria = elegida; tx.revisar = false;
+    }
     S.txs.push(tx); S.hashes[h] = 1; res.nuevos++;
   }
   guardar();
@@ -153,8 +183,7 @@ function revisarEnlace() {
   let texto = m[1];
   try { texto = decodeURIComponent(texto); } catch (_) { /* ya venía decodificado */ }
   history.replaceState(null, '', location.pathname); // no dejar el SMS en el historial
-  for (const msg of Parser.dividirMensajes(texto)) {
-    const h = Parser.hash(msg);
+  for (const { msg, h } of partirMensajes(texto)) {
     if (S.hashes[h] || pendientes.some(p => p.hash === h)) continue;
     pendientes.push(crearTx(msg, h) || { hash: h, noReconocido: true, raw: Parser.limpiar(msg) });
   }
@@ -365,13 +394,14 @@ function vImportar() {
       <summary><b>⚙️ Configurar la captura automática (una sola vez)</b></summary>
       <ol>
         <li>App <b>Atajos</b> › <b>Automatización</b> › <b>＋</b> › <b>Mensaje</b> › “El mensaje contiene” <code>Bancolombia</code> › <b>Ejecutar de inmediato</b>.</li>
-        <li>Acciones: <b>Recibir mensajes como entrada</b> y <b>Texto</b> con <code>---</code> + variable <b>Entrada de atajo › Contenido</b>.</li>
-        <li><b>Anexar al final del archivo de texto</b> (no la de Dropbox): <i>Texto</i> a <i>Shortcuts</i>, ruta <code>movimientos-banco.txt</code>, <b>Crear línea nueva</b> activado. Es tu copia de respaldo.</li>
-        <li><b>Codificar URL</b>: toca su entrada y elige la variable <b>Texto</b>.</li>
-        <li>Otra acción <b>Texto</b> con <code>https://abdurieder47-ui.github.io/mis-finanzas/#sms=</code> y, pegada al final, la variable <b>Texto codificado en URL</b>.</li>
-        <li><b>Abrir URL</b> con esa última variable <b>Texto</b>. Listo: con cada SMS se abre esta pantalla para confirmar el movimiento.</li>
+        <li><b>Recibir mensajes como entrada</b>, luego <b>Texto</b> con <code>---</code> + <b>Entrada de atajo › Contenido</b>, luego <b>Anexar al final del archivo de texto</b> (ruta <code>movimientos-banco.txt</code>, Crear línea nueva activado). Es el respaldo.</li>
+        <li><b>Texto</b> con una categoría por línea (las mismas de la app, más <code>Decidir después</code> y <code>No registrar</code>).</li>
+        <li><b>Dividir texto</b> por <b>Nuevas líneas</b>.</li>
+        <li><b>Elegir de la lista</b> (Texto dividido); en <b>Solicitud</b> pon la variable <b>Contenido</b> para ver el SMS.</li>
+        <li><b>Texto</b>: <code>---</code> + <b>Contenido</b> + <code> ##cat=</code> + <b>Elemento elegido</b>.</li>
+        <li><b>Anexar al final del archivo de texto</b> con ese último Texto, a <code>movimientos-banco.txt</code>.</li>
       </ol>
-      <p class="muted small">Importante: usa la app desde Safari (ícono de inicio con “Abrir como app web” desactivado), porque Atajos abre Safari y ahí quedan tus datos.</p>
+      <p class="muted small">Con cada SMS aparece la lista encima de lo que estés usando. Cuando quieras ver todo aquí, toca <b>Elegir archivo</b>: entran ya categorizados.</p>
       <p class="muted small">Tip: el archivo guarda todo el historial, así que aunque borres la app puedes volver a importarlo.</p>
     </details>`;
 }
