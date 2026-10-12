@@ -108,6 +108,24 @@ dialog.completa #hojaCuerpo { max-width: 520px; margin: 0 auto; padding-top: cal
 .montoGrande { font-size: 48px; font-weight: 800; letter-spacing: -1.5px; margin: 14px 0 4px; }
 .nuevo h2 { font-size: 22px; margin: 4px 0; }
 .btn.grande { padding: 17px; font-size: 18px; margin-top: 20px; }
+.seg.tres { grid-template-columns: 1fr 1fr 1fr; }
+.lbl { margin: 14px 0 6px; font-size: 14px; color: var(--mut); }
+.chks { display: flex; flex-wrap: wrap; gap: 8px; }
+.chk { margin: 0 !important; cursor: pointer; position: relative; }
+.chk input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; margin: 0; padding: 0; }
+.chk span { display: inline-flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 12px; background: var(--card); border: 1.5px solid var(--line); color: var(--tx); font-size: 15px; }
+.chk span::before { content: ""; width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--mut); flex: none; box-sizing: border-box; }
+.chk input:checked + span { border-color: var(--pri); background: color-mix(in srgb, var(--pri) 12%, var(--card)); font-weight: 600; }
+.chk input:checked + span::before { content: "✓"; background: var(--pri); border-color: var(--pri); color: var(--pri-tx); font-size: 13px; line-height: 14px; text-align: center; font-weight: 800; }
+.chk.solo { display: block; margin-top: 16px !important; } .chk.solo span { width: 100%; }
+#salida { margin-top: 8px; }
+.segTab { display: grid; grid-template-columns: 1fr 1fr; background: var(--chip); border-radius: 12px; padding: 3px; margin: 6px 0 4px; }
+.segTab button { border: 0; background: none; color: var(--tx); font: inherit; font-size: 15px; padding: 9px; border-radius: 10px; }
+.segTab button.on { background: var(--card); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.cuentasRes .fila { padding: 5px 0; } .cuentasRes .total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 9px; font-weight: 700; }
+.cuenta .tx { padding: 4px 0 10px; border: 0; }
+.monto.excl2 { color: var(--mut); }
+[hidden] { display: none !important; }
 #toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); opacity: 0; pointer-events: none; background: var(--tx); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px; width: max-content; max-width: calc(100% - 32px); transition: .25s; z-index: 20; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 </style>
@@ -121,9 +139,9 @@ dialog.completa #hojaCuerpo { max-width: 520px; margin: 0 auto; padding-top: cal
 <nav class="tabbar">
   <button data-tab="inicio"><span>🏠</span>Inicio</button>
   <button data-tab="movimientos"><span>📄</span>Movimientos</button>
+  <button data-tab="cuentas"><span>🏦</span>Cuentas</button>
   <button data-tab="deudas"><span>💳</span>Deudas</button>
-  <button data-tab="importar"><span>📥</span>Importar</button>
-  <button data-tab="ajustes"><span>⚙️</span>Ajustes</button>
+  <button data-tab="mas"><span>⚙️</span>Más</button>
 </nav>
 <dialog id="hoja"><div id="hojaCuerpo"></div></dialog>
 <div id="toast"></div>
