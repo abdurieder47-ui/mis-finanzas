@@ -560,7 +560,7 @@ function hojaTx(t, preset = {}) {
   const ef = cuentaEfectivo(), banco = S.cuentas.find(c => c.tipo === 'banco') || S.cuentas[0] || {};
   t = t || Object.assign({ id: '', tipo: 'gasto', monto: '', fecha: hoy(), hora: '', contraparte: '', categoria: 'Sin categoría', deudaId: '', nota: '',
     cuentaId: (ef || banco).id, destinoId: ef && ef.id !== banco.id ? ef.id : '' }, preset);
-  const origen = t.tipo === 'traslado' ? t.cuentaId : banco.id;
+  const origen = !nuevo && t.tipo === 'traslado' ? t.cuentaId : banco.id;
   const tipo = (v, l) => `<label><input type="radio" name="tipo" value="${v}" ${t.tipo === v ? 'checked' : ''}><span>${l}</span></label>`;
   abrirHoja(`
     <h2>${nuevo ? 'Nuevo movimiento' : 'Editar movimiento'}</h2>
