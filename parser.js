@@ -113,7 +113,7 @@
   // Un archivo/pegado puede traer muchos SMS: se separan por líneas "---" o por cada "Bancolombia:".
   function dividirMensajes(texto) {
     return texto
-      .split(/\n\s*-{3,}\s*\n|(?=Bancolombia\s*:)/i)
+      .split(/\s*-{3,}\s*|(?=Bancolombia\s*:)/i)
       .map(s => s.trim())
       .filter(s => s.length > 10);
   }
