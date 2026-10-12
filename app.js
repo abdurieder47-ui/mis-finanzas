@@ -425,6 +425,16 @@ function vAjustes() {
       <div class="inline"><input id="nuevaCat" placeholder="Nueva categoría"><button class="btn mini" data-agregar-cat>Agregar</button></div>
     </div>
     <div class="card">
+      <h2>☁️ Sincronización automática</h2>
+      <p class="muted small">El atajo envía cada movimiento clasificado a tu repositorio <b>privado</b> de GitHub y la app lo trae sola al abrirse.</p>
+      <label class="small muted">Repositorio<input id="ghRepo" value="${esc(S.config.repo || REPO_DEFECTO)}" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label class="small muted">Clave de acceso (token)<input id="ghToken" type="password" placeholder="${leerToken() ? '•••••••• (guardada)' : 'github_pat_…'}" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <button class="btn" data-gh-probar>Guardar y probar conexión</button>
+      <button class="btn sec" data-gh-sync>🔄 Sincronizar ahora</button>
+      <button class="btn sec" data-gh-todo>Recuperar todo el historial desde GitHub</button>
+      <p class="muted small center" id="ghEstado">${S.config.ultimaSync ? 'Última sincronización: ' + new Date(S.config.ultimaSync).toLocaleString('es-CO') : 'Aún no se ha sincronizado'}</p>
+    </div>
+    <div class="card">
       <h2>💾 Copia de seguridad</h2>
       <p class="muted small">Tus datos solo viven en este celular. Guarda una copia en iCloud de vez en cuando.</p>
       <button class="btn sec" data-exportar>Exportar copia (.json)</button>
@@ -668,6 +678,74 @@ $('#hoja').addEventListener('click', e => { if (e.target.id === 'hoja' && !e.tar
 $('#hoja').addEventListener('cancel', e => { if (pendientes.length) e.preventDefault(); });
 window.addEventListener('hashchange', revisarEnlace);
 
+/* ================= Sincronización con GitHub (issues de un repo privado) ================= */
+// El atajo crea un issue por SMS (cuerpo: "---<SMS> ##cat=<categoría>"). La app los importa y los cierra;
+// los cerrados quedan como respaldo y se pueden recuperar con "Recuperar todo".
+const REPO_DEFECTO = 'abdurieder47-ui/mis-finanzas-datos';
+const KEY_TOKEN = 'misfinanzas.token'; // aparte de S para que no salga en las copias exportadas
+function leerToken() { try { return localStorage.getItem(KEY_TOKEN) || ''; } catch (_) { return ''; } }
+const repoGH = () => S.config.repo || REPO_DEFECTO;
+let sincronizando = false;
+
+async function gh(ruta, opciones = {}) {
+  const r = await fetch('https://api.github.com/repos/' + repoGH() + ruta, Object.assign({}, opciones, {
+    headers: { Authorization: 'Bearer ' + leerToken(), Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }
+  }));
+  if (r.status === 401) throw new Error('La clave de acceso no es válida o venció');
+  if (r.status === 404) throw new Error('No encuentro el repositorio o la clave no tiene permiso sobre él');
+  if (r.status === 403) throw new Error('La clave no tiene permiso de Issues (lectura y escritura)');
+  if (!r.ok) throw new Error('GitHub respondió ' + r.status);
+  return r.json();
+}
+
+async function sincronizar({ manual = false, todo = false } = {}) {
+  if (!leerToken()) { if (manual) toast('Primero guarda tu clave de acceso'); return; }
+  if (sincronizando || !navigator.onLine) return;
+  sincronizando = true;
+  try {
+    const issues = [];
+    for (let page = 1; ; page++) {
+      const lote = await gh(`/issues?state=${todo ? 'all' : 'open'}&per_page=100&page=${page}&sort=created&direction=asc`);
+      issues.push(...lote.filter(i => !i.pull_request && i.body));
+      if (lote.length < 100) break;
+    }
+    const res = importarTexto(issues.map(i => i.body).join('\n'));
+    // Ya quedaron guardados en el celular: se cierran para no volver a descargarlos.
+    await Promise.all(issues.filter(i => i.state === 'open').map(i =>
+      gh('/issues/' + i.number, { method: 'PATCH', body: JSON.stringify({ state: 'closed' }) }).catch(() => {})));
+    S.config.ultimaSync = new Date().toISOString(); guardar();
+    if (res.nuevos) { render(); toast(`🔄 ${res.nuevos} movimiento${res.nuevos > 1 ? 's' : ''} nuevo${res.nuevos > 1 ? 's' : ''}`); }
+    else if (manual) { render(); toast('Todo al día'); }
+  } catch (e) {
+    if (manual) toast('⚠️ ' + e.message);
+  } finally { sincronizando = false; }
+}
+
+async function probarGH() {
+  const repo = $('#ghRepo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+  const token = $('#ghToken').value.trim();
+  S.config.repo = repo; guardar();
+  if (token) try { localStorage.setItem(KEY_TOKEN, token); } catch (_) { return toast('No se pudo guardar la clave'); }
+  try {
+    const info = await fetch('https://api.github.com/repos/' + repo, { headers: { Authorization: 'Bearer ' + leerToken(), Accept: 'application/vnd.github+json' } });
+    if (!info.ok) throw new Error(info.status === 401 ? 'La clave no es válida' : 'No encuentro el repositorio con esa clave');
+    if (!(await info.json()).private) { toast('⚠️ Ese repositorio es PÚBLICO: cualquiera vería tus movimientos. Hazlo privado.'); return; }
+    await gh('/issues?per_page=1');
+    toast('✅ Conectado a tu repositorio privado'); $('#ghToken').value = '';
+    await sincronizar({ manual: true }); render();
+  } catch (e) { toast('⚠️ ' + e.message); }
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if ('ghProbar' in b.dataset) probarGH();
+  if ('ghSync' in b.dataset) sincronizar({ manual: true });
+  if ('ghTodo' in b.dataset) sincronizar({ manual: true, todo: true });
+});
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); });
+window.addEventListener('online', () => sincronizar());
+
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 render();
 revisarEnlace();
+sincronizar();
