@@ -117,24 +117,90 @@ function aprender(tx, categoria) {
 }
 
 /* ================= Importación ================= */
+// Convierte un SMS en movimiento (sin guardarlo). null si no es un movimiento.
+function crearTx(msg, h) {
+  const p = Parser.parseSMS(msg);
+  if (!p) return null;
+  if (p.titular && !S.config.titular) S.config.titular = titleCase(p.titular);
+  const tx = {
+    id: uid(), hash: h, origen: 'sms', banco: p.banco,
+    fecha: p.fecha || hoy(), hora: p.hora, tipo: p.tipo, medio: p.medio, monto: p.monto,
+    contraparte: p.contraparte, cuenta: p.cuenta, revisar: p.revisar, nota: '', raw: p.raw, deudaId: null
+  };
+  tx.categoria = categorizar(tx);
+  return tx;
+}
+
 function importarTexto(texto) {
   const res = { nuevos: 0, repetidos: 0, ignorados: [] };
   for (const msg of Parser.dividirMensajes(texto)) {
     const h = Parser.hash(msg);
     if (S.hashes[h]) { res.repetidos++; continue; }
-    const p = Parser.parseSMS(msg);
-    if (!p) { res.ignorados.push(msg); continue; }
-    if (p.titular && !S.config.titular) S.config.titular = titleCase(p.titular);
-    const tx = {
-      id: uid(), hash: h, origen: 'sms', banco: p.banco,
-      fecha: p.fecha || hoy(), hora: p.hora, tipo: p.tipo, medio: p.medio, monto: p.monto,
-      contraparte: p.contraparte, cuenta: p.cuenta, revisar: p.revisar, nota: '', raw: p.raw, deudaId: null
-    };
-    tx.categoria = categorizar(tx);
+    const tx = crearTx(msg, h);
+    if (!tx) { res.ignorados.push(msg); continue; }
     S.txs.push(tx); S.hashes[h] = 1; res.nuevos++;
   }
   guardar();
   return res;
+}
+
+/* ===== Llegada directa desde Atajos: ...#sms=<texto> abre una pantalla de confirmación ===== */
+let pendientes = [];
+
+function revisarEnlace() {
+  const m = location.hash.match(/^#sms=(.*)$/s);
+  if (!m) return;
+  let texto = m[1];
+  try { texto = decodeURIComponent(texto); } catch (_) { /* ya venía decodificado */ }
+  history.replaceState(null, '', location.pathname); // no dejar el SMS en el historial
+  for (const msg of Parser.dividirMensajes(texto)) {
+    const h = Parser.hash(msg);
+    if (S.hashes[h] || pendientes.some(p => p.hash === h)) continue;
+    pendientes.push(crearTx(msg, h) || { hash: h, noReconocido: true, raw: Parser.limpiar(msg) });
+  }
+  if (pendientes.length) mostrarPendiente();
+  else if (m[1]) toast('Ese movimiento ya estaba registrado');
+}
+
+function mostrarPendiente() {
+  const t = pendientes[0];
+  if (!t) { cerrarHoja(); render(); return; }
+  const quedan = pendientes.length > 1 ? `<p class="muted center small">${pendientes.length - 1} más después de este</p>` : '';
+  if (t.noReconocido) {
+    abrirHoja(`<div class="nuevo">
+      <div class="big">🤔</div><h2>No reconocí este mensaje</h2>
+      <p class="raw">${esc(t.raw)}</p>
+      <button class="btn" data-pend-manual>Registrarlo a mano</button>
+      <button class="btn sec" data-pend-descartar>No es un movimiento</button>${quedan}</div>`, true);
+    return;
+  }
+  const ing = t.tipo === 'ingreso';
+  abrirHoja(`<form id="fPend" class="nuevo">
+    <span class="pill ${ing ? 'pos' : 'neg'}">${ing ? '⬇️ Te entró plata' : '⬆️ Salió plata'}</span>
+    <div class="montoGrande ${ing ? 'pos' : 'neg'}">${ing ? '+' : '-'}${fmt(t.monto)}</div>
+    <h2>${esc(t.contraparte ? titleCase(t.contraparte) : 'Movimiento')}</h2>
+    <p class="muted">${fechaLarga(t.fecha)}${t.hora ? ' · ' + t.hora : ''} · Bancolombia</p>
+    <label>Categoría<select name="categoria">${opcionesCat(t.categoria)}</select></label>
+    ${t.tipo === 'gasto' && S.deudas.some(d => !d.cerrada) ? `<label>Abono a deuda<select name="deudaId">${opcionesDeuda(t.deudaId)}</select></label>` : ''}
+    <label>Nota (opcional)<input name="nota" placeholder="Ej: almuerzo con amigos"></label>
+    <button class="btn grande" type="submit">✓ Guardar</button>
+    <button class="btn sec" type="button" data-pend-descartar>Descartar</button>
+    <details><summary class="muted small">Ver SMS</summary><p class="raw">${esc(t.raw)}</p></details>
+    ${quedan}</form>`, true);
+}
+
+function guardarPendiente(form) {
+  const t = pendientes.shift();
+  const f = new FormData(form);
+  const sugerida = t.categoria;
+  t.categoria = f.get('categoria');
+  if (f.has('deudaId')) t.deudaId = f.get('deudaId') || null;
+  t.nota = (f.get('nota') || '').trim();
+  t.revisar = false;
+  S.txs.push(t); S.hashes[t.hash] = 1;
+  let msg = '✅ Guardado';
+  if (t.categoria !== sugerida && t.contraparte) { t.catManual = true; aprender(t, t.categoria); msg = '✅ Guardado. La próxima vez lo sugeriré así'; }
+  guardar(); toast(msg); mostrarPendiente();
 }
 
 function mostrarResultado(res) {
@@ -298,13 +364,14 @@ function vImportar() {
     <details class="card guia" ${S.txs.length ? '' : 'open'}>
       <summary><b>⚙️ Configurar la captura automática (una sola vez)</b></summary>
       <ol>
-        <li>Abre la app <b>Atajos</b> › pestaña <b>Automatización</b> › <b>＋</b> › <b>Mensaje</b>.</li>
-        <li>En <b>“El mensaje contiene”</b> escribe <code>Bancolombia</code>.</li>
-        <li>Marca <b>Ejecutar inmediatamente</b> (y desactiva “Notificar al ejecutar” si quieres) › <b>Siguiente</b>.</li>
-        <li>Toca <b>No hay acciones</b>. Debe quedar <b>Recibir mensajes como entrada</b>. Busca y agrega la acción <b>Texto</b>; escribe <code>---</code> e inserta la variable <b>Entrada de atajo</b>; tócala y elige <b>Contenido</b>.</li>
-        <li>Busca y agrega la acción <b>Anexar al final del archivo de texto</b> (no la de Dropbox). Archivo: <code>movimientos-banco.txt</code> en la carpeta <b>Atajos</b> de iCloud Drive. Activa <b>Crear nueva línea</b>.</li>
-        <li>Listo. Cada SMS de Bancolombia queda guardado solo. Cuando quieras, entra aquí y toca <b>Elegir archivo</b>.</li>
+        <li>App <b>Atajos</b> › <b>Automatización</b> › <b>＋</b> › <b>Mensaje</b> › “El mensaje contiene” <code>Bancolombia</code> › <b>Ejecutar de inmediato</b>.</li>
+        <li>Acciones: <b>Recibir mensajes como entrada</b> y <b>Texto</b> con <code>---</code> + variable <b>Entrada de atajo › Contenido</b>.</li>
+        <li><b>Anexar al final del archivo de texto</b> (no la de Dropbox): <i>Texto</i> a <i>Shortcuts</i>, ruta <code>movimientos-banco.txt</code>, <b>Crear línea nueva</b> activado. Es tu copia de respaldo.</li>
+        <li><b>Codificar URL</b>: toca su entrada y elige la variable <b>Texto</b>.</li>
+        <li>Otra acción <b>Texto</b> con <code>https://abdurieder47-ui.github.io/mis-finanzas/#sms=</code> y, pegada al final, la variable <b>Texto codificado en URL</b>.</li>
+        <li><b>Abrir URL</b> con esa última variable <b>Texto</b>. Listo: con cada SMS se abre esta pantalla para confirmar el movimiento.</li>
       </ol>
+      <p class="muted small">Importante: usa la app desde Safari (ícono de inicio con “Abrir como app web” desactivado), porque Atajos abre Safari y ahí quedan tus datos.</p>
       <p class="muted small">Tip: el archivo guarda todo el historial, así que aunque borres la app puedes volver a importarlo.</p>
     </details>`;
 }
@@ -339,10 +406,11 @@ function vAjustes() {
 }
 
 /* ================= Hojas (formularios) ================= */
-function abrirHoja(html) {
+function abrirHoja(html, completa = false) {
   const d = $('#hoja');
   $('#hojaCuerpo').innerHTML = html;
-  d.showModal();
+  d.classList.toggle('completa', completa);
+  if (!d.open) d.showModal();
 }
 const cerrarHoja = () => $('#hoja').close();
 const opcionesCat = sel => S.categorias.map(c => `<option ${c.n === sel ? 'selected' : ''}>${esc(c.n)}</option>`).join('');
@@ -463,6 +531,11 @@ document.addEventListener('click', e => {
   else if (ds.tx) hojaTx(S.txs.find(t => t.id === ds.tx));
   else if ('nuevoTx' in ds) hojaTx(null);
   else if ('cerrar' in ds) cerrarHoja();
+  else if ('pendDescartar' in ds) { S.hashes[pendientes.shift().hash] = 1; guardar(); mostrarPendiente(); }
+  else if ('pendManual' in ds) {
+    const t = pendientes.shift(); S.hashes[t.hash] = 1; guardar();
+    hojaTx(null); $('#fTx').nota.value = t.raw.slice(0, 120);
+  }
   else if (ds.borrarTx) {
     if (!confirm('¿Eliminar este movimiento?')) return;
     S.txs = S.txs.filter(t => t.id !== ds.borrarTx); guardar(); cerrarHoja(); render(); toast('Eliminado');
@@ -525,6 +598,7 @@ document.addEventListener('submit', e => {
   e.preventDefault();
   if (e.target.id === 'fTx') guardarTx(e.target);
   if (e.target.id === 'fDeuda') guardarDeuda(e.target);
+  if (e.target.id === 'fPend') guardarPendiente(e.target);
 });
 
 document.addEventListener('input', e => {
@@ -560,7 +634,10 @@ document.addEventListener('change', async e => {
   }
 });
 
-$('#hoja').addEventListener('click', e => { if (e.target.id === 'hoja') cerrarHoja(); });
+$('#hoja').addEventListener('click', e => { if (e.target.id === 'hoja' && !e.target.classList.contains('completa')) cerrarHoja(); });
+$('#hoja').addEventListener('cancel', e => { if (pendientes.length) e.preventDefault(); });
+window.addEventListener('hashchange', revisarEnlace);
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 render();
+revisarEnlace();

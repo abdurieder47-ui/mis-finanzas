@@ -99,6 +99,15 @@ form label { display: block; margin: 12px 0 0; font-size: 14px; color: var(--mut
 .seg span { display: block; text-align: center; padding: 9px; border-radius: 10px; color: var(--tx); font-size: 15px; }
 .seg input:checked + span { background: var(--card); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 .mov { border-bottom: 1px solid var(--line); }
+dialog.completa { max-height: none; height: 100%; margin: 0; max-width: none; border-radius: 0; }
+dialog.completa #hojaCuerpo { max-width: 520px; margin: 0 auto; padding-top: calc(28px + env(safe-area-inset-top)); }
+.nuevo { text-align: center; }
+.nuevo label, .nuevo details { text-align: left; }
+.nuevo .big { font-size: 52px; }
+.pill { display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--chip); font-weight: 600; font-size: 14px; }
+.montoGrande { font-size: 48px; font-weight: 800; letter-spacing: -1.5px; margin: 14px 0 4px; }
+.nuevo h2 { font-size: 22px; margin: 4px 0; }
+.btn.grande { padding: 17px; font-size: 18px; margin-top: 20px; }
 #toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); opacity: 0; pointer-events: none; background: var(--tx); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px; width: max-content; max-width: calc(100% - 32px); transition: .25s; z-index: 20; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 </style>
